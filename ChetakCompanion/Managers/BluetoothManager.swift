@@ -77,6 +77,14 @@ final class BluetoothManager: NSObject, ObservableObject {
     /// Peripherals discovered during a scan (kept alive to avoid ARC release).
     private var discoveredPeripherals: [CBPeripheral] = []
 
+    /// Tracks the current target or connected peripheral so `disconnect()` can
+    /// cancel pending connections as well as active ones.
+    private var activePeripheral: CBPeripheral?
+
+    /// Peripheral IDs explicitly disconnected by the user, which must not
+    /// trigger auto-reconnect in `didDisconnectPeripheral`.
+    private var suppressedReconnectIDs: Set<UUID> = []
+
     // MARK: - Restoration identifier (must be stable across app launches)
 
     private static let restorationIdentifier = "com.chetakcompanion.bluetooth-central"
@@ -129,9 +137,29 @@ final class BluetoothManager: NSObject, ObservableObject {
     /// Initiate a connection to the given peripheral.
     func connect(to peripheral: CBPeripheral) {
         stopScanning()
+        suppressedReconnectIDs.remove(peripheral.identifier)
+        activePeripheral = peripheral
         connectionState = .connecting
         peripheral.delegate = self
         centralManager.connect(peripheral, options: nil)
+    }
+
+    /// Explicitly disconnect from the current peripheral without triggering
+    /// auto-reconnect.
+    func disconnect() {
+        stopScanning()
+
+        if let peripheral = activePeripheral ?? connectedPeripheral {
+            suppressedReconnectIDs.insert(peripheral.identifier)
+            centralManager.cancelPeripheralConnection(peripheral)
+        }
+
+        activePeripheral = nil
+        connectedPeripheral = nil
+        isConnected = false
+        connectionState = .disconnected
+        scooterData.isConnected = false
+        resetCharacteristics()
     }
 
     /// Encode and write a `NavigationInstruction` to the navigation
@@ -211,6 +239,7 @@ extension BluetoothManager: CBCentralManagerDelegate {
         if let peripherals = dict[CBCentralManagerRestoredStatePeripheralsKey] as? [CBPeripheral] {
             for peripheral in peripherals {
                 peripheral.delegate = self
+                activePeripheral = peripheral
                 if peripheral.state == .connected {
                     connectedPeripheral = peripheral
                     isConnected = true
@@ -274,6 +303,7 @@ extension BluetoothManager: CBCentralManagerDelegate {
 
     func centralManager(_ central: CBCentralManager,
                         didConnect peripheral: CBPeripheral) {
+        activePeripheral = peripheral
         connectedPeripheral = peripheral
         isConnected = true
         connectionState = .connected
@@ -286,6 +316,9 @@ extension BluetoothManager: CBCentralManagerDelegate {
     func centralManager(_ central: CBCentralManager,
                         didFailToConnect peripheral: CBPeripheral,
                         error: Error?) {
+        if suppressedReconnectIDs.remove(peripheral.identifier) != nil {
+            return
+        }
         // Retry immediately — no timer needed.
         autoReconnect(peripheral)
     }
@@ -295,6 +328,19 @@ extension BluetoothManager: CBCentralManagerDelegate {
                         error: Error?) {
         resetCharacteristics()
         scooterData.isConnected = false
+
+        if suppressedReconnectIDs.remove(peripheral.identifier) != nil {
+            if activePeripheral?.identifier == peripheral.identifier {
+                activePeripheral = nil
+            }
+            if connectedPeripheral?.identifier == peripheral.identifier {
+                connectedPeripheral = nil
+            }
+            isConnected = false
+            connectionState = .disconnected
+            return
+        }
+
         // Auto-reconnect immediately. iOS BLE connect requests don't time
         // out — the system will complete the connection whenever the
         // peripheral comes back in range.
