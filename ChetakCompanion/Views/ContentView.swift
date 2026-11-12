@@ -34,7 +34,7 @@ struct ContentView: View {
 
             RideHistoryView()
                 .tabItem {
-                    Label("History", systemImage: "clock.fill")
+                    Label("Ride History", systemImage: "clock.fill")
                 }
                 .tag(Tab.history)
 
