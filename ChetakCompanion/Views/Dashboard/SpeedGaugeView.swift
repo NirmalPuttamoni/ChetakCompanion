@@ -98,7 +98,7 @@ struct SpeedGaugeView: View {
                 animatedSpeed = speed
             }
         }
-        .onChange(of: speed) { _, newValue in
+        .onChange(of: speed) { newValue in
             withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
                 animatedSpeed = newValue
             }

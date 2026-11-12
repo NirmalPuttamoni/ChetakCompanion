@@ -69,7 +69,7 @@ struct BatteryGaugeView: View {
                 animatedPercentage = Double(percentage)
             }
         }
-        .onChange(of: percentage) { _, newValue in
+        .onChange(of: percentage) { newValue in
             withAnimation(.easeInOut(duration: 0.6)) {
                 animatedPercentage = Double(newValue)
             }

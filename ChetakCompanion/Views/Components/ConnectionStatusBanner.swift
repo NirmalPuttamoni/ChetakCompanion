@@ -62,7 +62,7 @@ struct ConnectionStatusBanner: View {
         .onAppear {
             updatePulseAnimation()
         }
-        .onChange(of: bluetoothManager.connectionState) { _, _ in
+        .onChange(of: bluetoothManager.connectionState) { _ in
             updatePulseAnimation()
         }
     }

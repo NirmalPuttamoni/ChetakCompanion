@@ -116,7 +116,7 @@ struct ChetakNavigationView: View {
                     searchText = ""
                     destination = nil
                     if locationManager.isNavigating {
-                        locationManager.stopNavigation()
+                        stopNavigation()
                     }
                 } label: {
                     Image(systemName: "xmark.circle.fill")
