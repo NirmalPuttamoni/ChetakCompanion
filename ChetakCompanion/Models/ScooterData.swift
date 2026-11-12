@@ -104,16 +104,25 @@ class ScooterData: ObservableObject {
     func update(from payload: Data) {
         guard payload.count >= 16 else { return }
 
-        batteryLevel   = Int(payload[0])
-        range          = Double(payload[1]) + Double(payload[2]) / 10.0
-        speed          = Double(payload[3]) + Double(payload[4]) / 10.0
-        rideMode       = payload[5] == 0x01 ? .sport : .eco
-        tripDistance    = Double((UInt16(payload[6]) << 8) | UInt16(payload[7])) / 10.0
-        odometer       = Double(
-            (UInt32(payload[8])  << 24) |
-            (UInt32(payload[9])  << 16) |
-            (UInt32(payload[10]) << 8)  |
-             UInt32(payload[11])
-        ) / 10.0
+        let applyUpdate = {
+            self.batteryLevel = Int(payload[0])
+            self.range        = Double(payload[1]) + Double(payload[2]) / 10.0
+            self.speed        = Double(payload[3]) + Double(payload[4]) / 10.0
+            self.rideMode     = payload[5] == 0x01 ? .sport : .eco
+            self.tripDistance = Double((UInt16(payload[6]) << 8) | UInt16(payload[7])) / 10.0
+            self.odometer     = Double(
+                (UInt32(payload[8])  << 24) |
+                (UInt32(payload[9])  << 16) |
+                (UInt32(payload[10]) << 8)  |
+                 UInt32(payload[11])
+            ) / 10.0
+            self.lastConnected = Date()
+        }
+
+        if Thread.isMainThread {
+            applyUpdate()
+        } else {
+            DispatchQueue.main.async(execute: applyUpdate)
+        }
     }
 }

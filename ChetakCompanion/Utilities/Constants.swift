@@ -8,6 +8,7 @@ import SwiftUI
 enum ChetakBLE {
     /// Primary GATT service exposed by the Chetak dashboard module.
     static let chetakServiceUUID      = CBUUID(string: "B7E30001-1B3F-4C07-A6A0-3ECDA80C7E00")
+    static let serviceUUID            = chetakServiceUUID
 
     /// Characteristic for sending navigation instructions (phone → scooter).
     static let navigationCharUUID     = CBUUID(string: "B7E30002-1B3F-4C07-A6A0-3ECDA80C7E00")

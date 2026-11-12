@@ -2,13 +2,6 @@ import Foundation
 import CoreBluetooth
 import Combine
 
-// MARK: - BLE Service & Characteristic UUIDs
-
-let chetakServiceUUID     = CBUUID(string: "4E530000-B5A3-F393-E0A9-E50E24DCCA9E")
-let navigationCharUUID    = CBUUID(string: "4E530001-B5A3-F393-E0A9-E50E24DCCA9E")
-let telemetryCharUUID     = CBUUID(string: "4E530002-B5A3-F393-E0A9-E50E24DCCA9E")
-let commandCharUUID       = CBUUID(string: "4E530003-B5A3-F393-E0A9-E50E24DCCA9E")
-
 // MARK: - Connection State
 
 enum ConnectionState: String, Equatable {
@@ -62,7 +55,7 @@ final class BluetoothManager: NSObject, ObservableObject {
     @Published var connectedPeripheral: CBPeripheral?
 
     /// Shared telemetry model — updated on every BLE notification.
-    @Published var scooterData = ScooterData()
+    let scooterData: ScooterData
 
     // MARK: Private
 
@@ -85,13 +78,10 @@ final class BluetoothManager: NSObject, ObservableObject {
     /// trigger auto-reconnect in `didDisconnectPeripheral`.
     private var suppressedReconnectIDs: Set<UUID> = []
 
-    // MARK: - Restoration identifier (must be stable across app launches)
-
-    private static let restorationIdentifier = "com.chetakcompanion.bluetooth-central"
-
     // MARK: - Init
 
-    override init() {
+    init(scooterData: ScooterData = ScooterData()) {
+        self.scooterData = scooterData
         super.init()
 
         // CRITICAL: create the central manager immediately so that iOS can
@@ -100,7 +90,7 @@ final class BluetoothManager: NSObject, ObservableObject {
             delegate: self,
             queue: nil, // main queue
             options: [
-                CBCentralManagerOptionRestoreIdentifierKey: BluetoothManager.restorationIdentifier
+                CBCentralManagerOptionRestoreIdentifierKey: AppConstants.bleRestorationID
             ]
         )
     }
@@ -118,7 +108,7 @@ final class BluetoothManager: NSObject, ObservableObject {
         discoveredPeripherals.removeAll()
 
         centralManager.scanForPeripherals(
-            withServices: [chetakServiceUUID],
+            withServices: [ChetakBLE.chetakServiceUUID],
             options: [CBCentralManagerScanOptionAllowDuplicatesKey: false]
         )
     }
@@ -220,6 +210,7 @@ extension BluetoothManager: CBCentralManagerDelegate {
             isConnected = false
             connectionState = .disconnected
             connectedPeripheral = nil
+            scooterData.isConnected = false
             resetCharacteristics()
         default:
             break
@@ -244,8 +235,9 @@ extension BluetoothManager: CBCentralManagerDelegate {
                     connectedPeripheral = peripheral
                     isConnected = true
                     connectionState = .connected
+                    scooterData.isConnected = true
                     // Re-discover services in case characteristics were lost.
-                    peripheral.discoverServices([chetakServiceUUID])
+                    peripheral.discoverServices([ChetakBLE.chetakServiceUUID])
                 } else {
                     // The peripheral was being connected — retry.
                     autoReconnect(peripheral)
@@ -283,7 +275,7 @@ extension BluetoothManager: CBCentralManagerDelegate {
 
         let serviceMatch: Bool = {
             if let services = advertisementData[CBAdvertisementDataServiceUUIDsKey] as? [CBUUID] {
-                return services.contains(chetakServiceUUID)
+                return services.contains(ChetakBLE.chetakServiceUUID)
             }
             return false
         }()
@@ -310,7 +302,7 @@ extension BluetoothManager: CBCentralManagerDelegate {
         scooterData.isConnected = true
 
         // Discover only the Chetak service.
-        peripheral.discoverServices([chetakServiceUUID])
+        peripheral.discoverServices([ChetakBLE.chetakServiceUUID])
     }
 
     func centralManager(_ central: CBCentralManager,
@@ -358,9 +350,13 @@ extension BluetoothManager: CBPeripheralDelegate {
                     didDiscoverServices error: Error?) {
         guard let services = peripheral.services else { return }
 
-        for service in services where service.uuid == chetakServiceUUID {
+        for service in services where service.uuid == ChetakBLE.chetakServiceUUID {
             peripheral.discoverCharacteristics(
-                [navigationCharUUID, telemetryCharUUID, commandCharUUID],
+                [
+                    ChetakBLE.navigationCharUUID,
+                    ChetakBLE.telemetryCharUUID,
+                    ChetakBLE.commandCharUUID
+                ],
                 for: service
             )
         }
@@ -375,13 +371,13 @@ extension BluetoothManager: CBPeripheralDelegate {
 
         for characteristic in characteristics {
             switch characteristic.uuid {
-            case navigationCharUUID:
+            case ChetakBLE.navigationCharUUID:
                 navigationCharacteristic = characteristic
-            case telemetryCharUUID:
+            case ChetakBLE.telemetryCharUUID:
                 telemetryCharacteristic = characteristic
                 // Subscribe for telemetry notifications.
                 peripheral.setNotifyValue(true, for: characteristic)
-            case commandCharUUID:
+            case ChetakBLE.commandCharUUID:
                 commandCharacteristic = characteristic
             default:
                 break
@@ -397,9 +393,9 @@ extension BluetoothManager: CBPeripheralDelegate {
         guard error == nil, let data = characteristic.value else { return }
 
         switch characteristic.uuid {
-        case telemetryCharUUID:
+        case ChetakBLE.telemetryCharUUID:
             parseTelemetry(data)
-        case navigationCharUUID:
+        case ChetakBLE.navigationCharUUID:
             // ACK or response from dashboard — ignored for now.
             break
         default:
@@ -417,50 +413,12 @@ extension BluetoothManager: CBPeripheralDelegate {
 
     // MARK: Telemetry Parsing
 
-    /// Expected payload layout (20 bytes):
-    /// ```
-    /// [0]      UInt8   — battery level (0-100)
-    /// [1...4]  Float32 — speed km/h (little-endian)
-    /// [5...8]  Float32 — range km   (little-endian)
-    /// [9]      UInt8   — ride mode (0 = eco, 1 = sport)
-    /// [10..13] Float32 — trip distance km
-    /// [14..17] Float32 — odometer km
-    /// ```
+    /// Delegates binary telemetry parsing to `ScooterData.update(from:)`
+    /// so the BLE payload format has a single source of truth.
     private func parseTelemetry(_ data: Data) {
-        guard data.count >= 18 else { return }
-
-        let battery = Int(data[0])
-
-        let speed: Double = {
-            let raw: Float = data.subdata(in: 1..<5).withUnsafeBytes { $0.load(as: Float.self) }
-            return Double(raw)
-        }()
-
-        let range: Double = {
-            let raw: Float = data.subdata(in: 5..<9).withUnsafeBytes { $0.load(as: Float.self) }
-            return Double(raw)
-        }()
-
-        let mode: RideMode = data[9] == 0x01 ? .sport : .eco
-
-        let tripDistance: Double = {
-            let raw: Float = data.subdata(in: 10..<14).withUnsafeBytes { $0.load(as: Float.self) }
-            return Double(raw)
-        }()
-
-        let odometer: Double = {
-            let raw: Float = data.subdata(in: 14..<18).withUnsafeBytes { $0.load(as: Float.self) }
-            return Double(raw)
-        }()
-
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
-            self.scooterData.batteryLevel = battery
-            self.scooterData.speed = speed
-            self.scooterData.range = range
-            self.scooterData.rideMode = mode
-            self.scooterData.tripDistance = tripDistance
-            self.scooterData.odometer = odometer
+            self.scooterData.update(from: data)
             self.scooterData.lastConnected = Date()
         }
     }

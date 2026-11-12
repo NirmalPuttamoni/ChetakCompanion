@@ -5,11 +5,15 @@ import BackgroundTasks
 struct ChetakCompanionApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
-    @StateObject private var bluetoothManager = BluetoothManager()
-    @StateObject private var locationManager = LocationManager()
-    @StateObject private var scooterData = ScooterData()
+    @StateObject private var bluetoothManager: BluetoothManager
+    @StateObject private var locationManager: LocationManager
 
     init() {
+        let bt = BluetoothManager()
+        let loc = LocationManager()
+        loc.bluetoothManager = bt
+        _bluetoothManager = StateObject(wrappedValue: bt)
+        _locationManager = StateObject(wrappedValue: loc)
         registerBackgroundTasks()
     }
 
@@ -18,7 +22,7 @@ struct ChetakCompanionApp: App {
             ContentView()
                 .environmentObject(bluetoothManager)
                 .environmentObject(locationManager)
-                .environmentObject(scooterData)
+                .environmentObject(bluetoothManager.scooterData)
         }
     }
 
