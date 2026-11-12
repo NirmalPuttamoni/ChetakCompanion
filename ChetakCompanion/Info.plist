@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
+    <key>CFBundleDisplayName</key>
+    <string>ChetakCompanion</string>
+    <key>CFBundleExecutable</key>
+    <string>$(EXECUTABLE_NAME)</string>
+    <key>CFBundleIdentifier</key>
+    <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>$(PRODUCT_NAME)</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>LSRequiresIPhoneOS</key>
+    <true/>
+    <key>UIApplicationSceneManifest</key>
+    <dict>
+        <key>UIApplicationSupportsMultipleScenes</key>
+        <false/>
+    </dict>
+    <key>UILaunchScreen</key>
+    <dict/>
+    <key>UISupportedInterfaceOrientations</key>
+    <array>
+        <string>UIInterfaceOrientationPortrait</string>
+    </array>
+    <key>UIRequiredDeviceCapabilities</key>
+    <array>
+        <string>bluetooth-le</string>
+        <string>location-services</string>
+    </array>
+
+    <!-- Background Modes -->
+    <key>UIBackgroundModes</key>
+    <array>
+        <string>location</string>
+        <string>bluetooth-central</string>
+        <string>bluetooth-peripheral</string>
+        <string>fetch</string>
+    </array>
+
+    <!-- Bluetooth Usage -->
+    <key>NSBluetoothAlwaysUsageDescription</key>
+    <string>ChetakCompanion needs Bluetooth to connect to your Chetak scooter dashboard and send navigation data even when the screen is locked.</string>
+
+    <!-- Location Usage -->
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>ChetakCompanion needs your location for turn-by-turn navigation on your Chetak dashboard.</string>
+    <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+    <string>ChetakCompanion needs continuous location access to keep navigation active on your Chetak dashboard even when your phone screen is locked.</string>
+    <key>NSLocationAlwaysUsageDescription</key>
+    <string>ChetakCompanion needs location access to provide uninterrupted navigation to your Chetak scooter.</string>
+
+    <!-- Background Task Identifiers -->
+    <key>BGTaskSchedulerPermittedIdentifiers</key>
+    <array>
+        <string>com.chetak.companion.refresh</string>
+        <string>com.chetak.companion.telemetry</string>
+    </array>
+</dict>
+</plist>
